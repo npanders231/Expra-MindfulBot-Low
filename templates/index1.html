@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindfulBot Lumi</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f9;
+    }
+
+    .chat-container {
+      width: 400px;
+      height: 650px;
+      margin: 50px auto;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      background-color: #666;
+      color: #fff;
+      padding: 10px 15px;
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .chat-header img {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+      max-width: 240px;
+    }
+
+    .header-title {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .header-subtitle {
+      font-size: 12px;
+      opacity: 0.95;
+      margin-top: 2px;
+    }
+
+    .chat-timer {
+      display: block;
+      font-size: 12px;
+      margin-top: 4px;
+      font-weight: bold;
+      opacity: 0.95;
+    }
+
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      scrollbar-width: thin;
+      scrollbar-color: #888 #f1f1f1;
+    }
+
+    .bot-message-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .bot-name {
+      font-weight: bold;
+      margin-top: 10px;
+      min-width: 50px;
+    }
+
+    .bot-message {
+      background-color: #f1f1f1;
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 70%;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .message {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+
+    .user-message {
+      background-color: #007bff;
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 70%;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .typing-message {
+      font-style: italic;
+      color: #666;
+    }
+
+    .input-container {
+      display: flex;
+      align-items: flex-end;
+      padding: 10px;
+      border-top: 1px solid #e0e0e0;
+      background-color: #fff;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ccc;
+      border-radius: 15px;
+      font-size: 16px;
+      font-family: Arial, sans-serif;
+      resize: none;
+      min-height: 50px;
+      max-height: 140px;
+      overflow-y: auto;
+      transition: height 0.2s ease;
+      box-sizing: border-box;
+    }
+
+    .send-button {
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      transition: background-color 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .send-button svg {
+      fill: #333;
+    }
+
+    .send-button:hover {
+      background-color: #d1d1d1;
+    }
+
+    .send-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const messagesContainer = document.querySelector(".chat-messages");
+      const inputField = document.querySelector(".input-field");
+      const sendButton = document.querySelector(".send-button");
+      const timerElement = document.querySelector("#chat-timer");
+      const subtitleElement = document.querySelector("#chat-subtitle");
+
+      let chatHistory = [];
+      let chatDurationMs = 7.5 * 60 * 1000;
+      let daySwitchPauseMs = 2 * 60 * 1000;
+      let chatStartedAt = null;
+      let chatClosedAt = null;
+      let currentStudyDay = Number("{{ study_day|default('1') }}");
+      let maxStudyDay = 4;
+
+      let isSending = false;
+      let chatExpired = false;
+      let typingIndicator = null;
+      let timerInterval = null;
+
+      function scrollToBottom() {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function cleanBotText(text) {
+        return String(text || "")
+          .replace(/\*\*(.*?)\*\*/g, "$1")
+          .replace(/__(.*?)__/g, "$1")
+          .replace(/\*/g, "");
+      }
+
+      function setInputDisabled(disabled) {
+        inputField.disabled = disabled;
+        sendButton.disabled = disabled;
+      }
+
+      function updateHeader() {
+        subtitleElement.textContent = `Tag ${currentStudyDay} von ${maxStudyDay}`;
+      }
+
+      function addUserMessage(text) {
+        const wrapper = document.createElement("div");
+        wrapper.classList.add("message");
+
+        const el = document.createElement("div");
+        el.classList.add("user-message");
+        el.textContent = text;
+
+        wrapper.appendChild(el);
+        messagesContainer.appendChild(wrapper);
+        scrollToBottom();
+      }
+
+      function addBotMessage(text) {
+        const el = document.createElement("div");
+        el.classList.add("bot-message-container");
+
+        el.innerHTML = `
+          <div class="bot-name">Lumi:</div>
+          <div class="bot-message">${escapeHtml(cleanBotText(text))}</div>
+        `;
+
+        messagesContainer.appendChild(el);
+        scrollToBottom();
+      }
+
+      function showTypingIndicator() {
+        removeTypingIndicator();
+
+        typingIndicator = document.createElement("div");
+        typingIndicator.classList.add("bot-message-container");
+        typingIndicator.innerHTML = `
+          <div class="bot-name">Lumi:</div>
+          <div class="bot-message typing-message">schreibt ...</div>
+        `;
+
+        messagesContainer.appendChild(typingIndicator);
+        scrollToBottom();
+      }
+
+      function removeTypingIndicator() {
+        if (typingIndicator) {
+          typingIndicator.remove();
+          typingIndicator = null;
+        }
+      }
+
+      function formatRemainingTime(ms) {
+        const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+      }
+
+      function setTimerState(data) {
+        if (!data) return;
+        if (Array.isArray(data.chat_history)) chatHistory = data.chat_history;
+        if (data.study_day) currentStudyDay = Number(data.study_day);
+        if (data.max_study_day) maxStudyDay = Number(data.max_study_day);
+        chatDurationMs = data.duration_seconds ? Number(data.duration_seconds) * 1000 : 7.5 * 60 * 1000;
+        daySwitchPauseMs = data.pause_seconds ? Number(data.pause_seconds) * 1000 : 2 * 60 * 1000;
+        chatStartedAt = data.chat_started_at ? new Date(data.chat_started_at).getTime() : null;
+        chatClosedAt = data.conversation_closed_at ? new Date(data.conversation_closed_at).getTime() : null;
+        updateHeader();
+      }
+
+      function getMsUntilNextDay() {
+        if (chatClosedAt) {
+          const elapsedAfterClosing = Date.now() - chatClosedAt;
+          return Math.max(0, daySwitchPauseMs - elapsedAfterClosing);
+        }
+        return daySwitchPauseMs;
+      }
+
+      function resetTimerForNextDay() {
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        chatStartedAt = null;
+        chatClosedAt = null;
+        chatExpired = false;
+        timerElement.textContent = `Gesprächszeit: ${formatRemainingTime(chatDurationMs)}`;
+      }
+
+      async function startNextDayAfterPause() {
+        if (currentStudyDay >= maxStudyDay) return;
+
+        const waitMs = getMsUntilNextDay();
+        window.setTimeout(async () => {
+          currentStudyDay += 1;
+          resetTimerForNextDay();
+          inputField.placeholder = "Schreibe hier deine Nachricht...";
+          await startChatFromPrompt();
+        }, Math.max(1000, waitMs));
+      }
+
+      function finishClosedChat() {
+        chatExpired = true;
+        setInputDisabled(true);
+        timerElement.textContent = "Gespräch beendet";
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+
+        if (currentStudyDay < maxStudyDay) {
+          inputField.placeholder = "Kurze Pause. Das nächste Thema startet gleich automatisch.";
+          startNextDayAfterPause();
+        } else {
+          inputField.placeholder = "Die Studie ist abgeschlossen.";
+        }
+      }
+
+      function updateTimer() {
+        if (!chatStartedAt) {
+          timerElement.textContent = `Gesprächszeit: ${formatRemainingTime(chatDurationMs)}`;
+          return;
+        }
+
+        const elapsed = Date.now() - chatStartedAt;
+        const remaining = chatDurationMs - elapsed;
+
+        // Nach 7:30 Minuten wird NICHT automatisch beendet.
+        // Die teilnehmende Person kann ihre Antwort noch absenden.
+        // Erst die nächste Serverantwort ist dann die Abschlussnachricht.
+        if (remaining <= 0) {
+          timerElement.textContent = "Gesprächszeit: 00:00";
+          if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+          }
+          return;
+        }
+
+        timerElement.textContent = `Gesprächszeit: ${formatRemainingTime(remaining)}`;
+      }
+
+      function startTimerIfNeeded() {
+        updateTimer();
+        if (!timerInterval) {
+          timerInterval = setInterval(updateTimer, 1000);
+        }
+      }
+
+      async function startChatFromPrompt() {
+        showTypingIndicator();
+        setInputDisabled(true);
+
+        try {
+          const response = await fetch("/start_chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              study_day: currentStudyDay,
+              chat_history: chatHistory
+            })
+          });
+
+          const data = await response.json();
+          removeTypingIndicator();
+          setTimerState(data);
+
+          if (!response.ok) {
+            addBotMessage(data.error || "Chat konnte nicht gestartet werden.");
+            return;
+          }
+
+          if (data.reply) addBotMessage(data.reply);
+
+          chatExpired = Boolean(data.expired);
+          if (chatExpired) {
+            finishClosedChat();
+          } else {
+            setInputDisabled(false);
+            inputField.focus();
+            startTimerIfNeeded();
+          }
+        } catch (error) {
+          removeTypingIndicator();
+          console.error(error);
+          addBotMessage("Chat konnte nicht gestartet werden.");
+        }
+      }
+
+      async function loadChat() {
+        try {
+          const response = await fetch("/load_chat");
+          const data = await response.json();
+          setTimerState(data);
+          messagesContainer.innerHTML = "";
+
+          if (!response.ok) {
+            addBotMessage(data.error || "Chat konnte nicht geladen werden.");
+            return;
+          }
+
+          // Es wird bewusst nichts vom Server geladen oder gespeichert.
+          // Der Chat startet beim Öffnen neu und läuft dann komplett in diesem Browser-Tab.
+          await startChatFromPrompt();
+        } catch (error) {
+          console.error(error);
+          addBotMessage("Chat konnte nicht geladen werden.");
+        }
+      }
+
+      async function sendMessage() {
+        const userMessage = inputField.value.trim();
+        if (userMessage === "" || isSending || chatExpired) return;
+
+        isSending = true;
+        setInputDisabled(true);
+
+        addUserMessage(userMessage);
+        inputField.value = "";
+        inputField.style.height = "auto";
+        showTypingIndicator();
+
+        try {
+          const response = await fetch("/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: userMessage,
+              study_day: currentStudyDay,
+              chat_history: chatHistory
+            })
+          });
+
+          const data = await response.json();
+          removeTypingIndicator();
+          setTimerState(data);
+
+          if (!response.ok) {
+            addBotMessage(data.error || "Serverfehler.");
+            if (data.expired) finishClosedChat();
+            return;
+          }
+
+          if (data.reply) addBotMessage(data.reply);
+          if (data.expired) {
+            finishClosedChat();
+            return;
+          }
+        } catch (error) {
+          removeTypingIndicator();
+          addBotMessage("Verbindung fehlgeschlagen.");
+          console.error(error);
+        } finally {
+          isSending = false;
+          if (!chatExpired) {
+            setInputDisabled(false);
+            inputField.focus();
+          }
+        }
+      }
+
+      sendButton.addEventListener("click", sendMessage);
+
+      inputField.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          sendMessage();
+        }
+      });
+
+      inputField.addEventListener("input", () => {
+        inputField.style.height = "auto";
+        inputField.style.height = inputField.scrollHeight + "px";
+      });
+
+      updateHeader();
+      loadChat();
+    });
+  </script>
+</head>
+
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      <img src="/static/chattiHFI.png" alt="MindfulBot Lumi">
+
+      <div class="header-text">
+        <div class="header-title">MindfulBot Lumi</div>
+        <div class="header-subtitle" id="chat-subtitle">Tag {{ study_day|default('1') }} von 4</div>
+        <div class="chat-timer" id="chat-timer">Gesprächszeit: 07:30</div>
+      </div>
+
+    </div>
+
+    <div class="chat-messages"></div>
+
+    <div class="input-container">
+      <textarea
+        class="input-field"
+        placeholder="Schreibe hier deine Nachricht..."
+        rows="1"
+      ></textarea>
+
+      <button class="send-button" type="button" aria-label="Nachricht senden">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+          <path d="M2 2L22 12L2 22V16L16 12L2 8V2Z" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</body>
+</html>
