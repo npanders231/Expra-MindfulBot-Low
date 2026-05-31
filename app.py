@@ -305,7 +305,7 @@ Leite das Gespräch nach Ablauf der Gesprächszeit in zwei bis drei Sätzen freu
 }
 
 INITIAL_ASSISTANT_MESSAGES = {
-    1: "Hallo, ich bin LLM 2.0 und wurde als Chat-Bot für Themen aus dem Bereich psychische Gesundheit entwickelt. Wer bist Du und wie geht es Dir heute?",
+    1: "Hallo, ich bin LLM 2.0 und wurde als Chat-Bot für Themen aus dem Bereich psychische Gesundheit entwickelt. Ich werde dich in den nächsten Tagen ein Stück begleiten und mit dir über Themen rund um psychische Gesundheit, Stress und Wohlbefinden sprechen. Du kannst dabei ganz offen erzählen, was dich beschäftigt, was dir guttut oder was dir vielleicht gerade schwerfällt.",
     2: "Willkommen zur heutigen Gesundheitsreflexion. Im gestrigen Gespräch standen Stress und Stressbewältigung im Mittelpunkt. Daran anschließend sollen heute verschiedene Möglichkeiten der Entspannung thematisiert werden.",
     3: "Willkommen zur heutigen Gesundheitsreflexion{NAME_PART}. Im vorherigen Gespräch standen Entspannung und verschiedene Entspannungsmethoden im Mittelpunkt. Da Erholung eng mit gesundem Schlaf verbunden ist, soll nun das Thema Schlafhygiene betrachtet werden.",
     4: "Willkommen zur heutigen Gesundheitsreflexion{NAME_PART}. Nach der Auseinandersetzung mit Erholung und Schlaf wird Dankbarkeit nun als weiterer möglicher Faktor psychischer Gesundheit thematisiert."
